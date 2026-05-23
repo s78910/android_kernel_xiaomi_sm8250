@@ -33,7 +33,7 @@ on:
           - build-miui.sh
 
       ksu:
-        description: 'Enable KernelSU (ReSukiSU)'
+        description: 'Enable KernelSU (ReSukiSU-SuSFS)'
         required: true
         type: boolean
         default: true
@@ -60,7 +60,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
-        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
     - name: Setup Cache (ccache)
       uses: actions/cache@v5
@@ -72,12 +71,12 @@ jobs:
           kernel-ccache-${{ inputs.device }}-
           kernel-ccache-
 
-    - name: Setup Toolchain (ZyC-Clang 15)
+    - name: Setup Toolchain (ZyC-Clang 16)
       run: |
         mkdir -p $HOME/zyc-clang
         cd $HOME/zyc-clang
-        wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20260208-release/Clang-15.0.7-20260208.tar.gz
-        tar -zxvf Clang-15.0.7-20260208.tar.gz
+        wget -q https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260510-release/Clang-16.0.6-20260510.tar.gz
+        tar -zxvf Clang-16.0.6-20260510.tar.gz
 
     - name: Build Kernel
       run: |

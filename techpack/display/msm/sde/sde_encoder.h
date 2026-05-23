@@ -373,6 +373,13 @@ void sde_encoder_needs_hw_reset(struct drm_encoder *enc);
 void sde_encoder_uidle_enable(struct drm_encoder *drm_enc, bool enable);
 
 /**
+ * sde_encoder_vid_wait_for_active - wait Vactive region for some mark region
+ * @drm_enc:    Pointer to drm encoder structure
+ * @Return:     non zero value if wait timeout occurred
+ */
+int sde_encoder_vid_wait_for_active(struct drm_encoder *enc);
+
+/**
  * sde_encoder_virt_reset - delay encoder virt reset
  * @drm_enc:	Pointer to drm encoder structure
  */
@@ -400,11 +407,10 @@ static inline struct sde_kms *sde_encoder_get_kms(struct drm_encoder *drm_enc)
 }
 
 /**
- * sde_encoder_vid_wait_for_active - wait Vactive region for some mark region
+ * sde_encoder_trigger_early_wakeup - trigger early wake up
  * @drm_enc:    Pointer to drm encoder structure
- * @Return:     non zero value if wait timeout occurred
  */
-int sde_encoder_vid_wait_for_active(struct drm_encoder *enc);
+void sde_encoder_trigger_early_wakeup(struct drm_encoder *drm_enc);
 
 bool get_sde_encoder_virt_prepare_kickoff(struct drm_connector *connector);
 

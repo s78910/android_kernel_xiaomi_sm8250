@@ -49,13 +49,29 @@ fi
 
 # Enable ccache for speed up compiling 
 export CCACHE_DIR="$HOME/.cache/ccache_mikernel" 
-export CC="ccache gcc"
-export CXX="ccache g++"
+export CC="clang"
+export CXX="clang++"
 export PATH="/usr/lib/ccache:$PATH"
+export CCACHE_COMPILERCHECK=content
+export CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime
 echo "CCACHE_DIR: [$CCACHE_DIR]"
 
 
-MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+MAKE_ARGS="ARCH=arm64 \
+           SUBARCH=arm64 \
+           O=out \
+           CC=clang \
+           HOSTCC=clang \
+           CLANG_TRIPLE=aarch64-linux-gnu- \
+           CROSS_COMPILE=aarch64-linux-gnu- \
+           CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+           CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+           LD=ld.lld \
+           AR=llvm-ar \
+           NM=llvm-nm \
+           OBJCOPY=llvm-objcopy \
+           OBJDUMP=llvm-objdump \
+           STRIP=llvm-strip"
 
 
 if [ "$1" == "j1" ]; then
@@ -85,7 +101,7 @@ clang --version
 KSU_ZIP_STR=NoKernelSU
 if [ "$2" == "ksu" ]; then
     KSU_ENABLE=1
-    KSU_ZIP_STR=ReSukiSU
+    KSU_ZIP_STR=ReSukiSU-SuSFS
 else
     KSU_ENABLE=0
 fi
@@ -110,8 +126,8 @@ echo "Cleaning..."
 rm -rf out/
 rm -rf anykernel/
 
-echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/liyafe1997/AnyKernel3)"
-git clone https://github.com/liyafe1997/AnyKernel3 -b kona --single-branch --depth=1 anykernel
+echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
+git clone https://github.com/AstideLabs/AnyKernel3 -b master --single-branch --depth=1 anykernel
 
 # ------------- Building for MIUI -------------
 
@@ -182,23 +198,31 @@ make $MAKE_ARGS ${TARGET_DEVICE}_defconfig
 if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
-    -e KSU_MANUAL_HOOK \
-    -e KSU_MANUAL_HOOK_AUTO_SETUID_HOOK \
-    -e KSU_MANUAL_HOOK_AUTO_INITRC_HOOK \
-    -e KSU_MANUAL_HOOK_AUTO_INPUT_HOOK \
+    -e THREAD_INFO_IN_TASK \
+    -e KSU_SUSFS \
+    -e KSU_SUSFS_SUS_PATH \
+    -e KSU_SUSFS_SUS_MOUNT \
+    -e KSU_SUSFS_SUS_KSTAT \
+    -e KSU_SUSFS_SPOOF_UNAME \
+    -e KSU_SUSFS_ENABLE_LOG \
+    -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+    -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+    -e KSU_SUSFS_OPEN_REDIRECT \
+    -e KSU_SUSFS_SUS_MAP \
     -e KSU_MULTI_MANAGER_SUPPORT \
     -e KPM
 else
     scripts/config --file out/.config -d KSU
 fi
 
+scripts/config --file out/.config \
+    -e BBG
 
 scripts/config --file out/.config \
     --set-str STATIC_USERMODEHELPER_PATH /system/bin/micd \
     -e PERF_CRITICAL_RT_TASK	\
     -e SF_BINDER		\
     -e OVERLAY_FS		\
-    -d DEBUG_FS \
     -e MIGT \
     -e MIGT_ENERGY_MODEL \
     -e MIHW \
@@ -208,22 +232,21 @@ scripts/config --file out/.config \
     -e MILLET \
     -e PERF_HUMANTASK \
     -d LTO_CLANG \
+    -e LTO_NONE \
     -e SF_BINDER \
     -e XIAOMI_MIUI \
     -d MI_MEMORY_SYSFS \
     -e TASK_DELAY_ACCT \
     -e MIUI_ZRAM_MEMORY_TRACKING \
-    -d CONFIG_MODULE_SIG_SHA512 \
-    -d CONFIG_MODULE_SIG_HASH \
     -e MI_FRAGMENTION \
     -e PERF_HELPER \
     -e BOOTUP_RECLAIM \
     -e MI_RECLAIM \
     -e RTMM \
+    -d REKERNEL \
+    -d REKERNEL_NETWORK
 
 make $MAKE_ARGS -j$(nproc)
-
-
 
 if [ -f "out/arch/arm64/boot/Image" ]; then
     echo "The file [out/arch/arm64/boot/Image] exists. MIUI Build successfully."
@@ -241,7 +264,7 @@ rm -rf ${dts_source}
 mv .dts.bak ${dts_source}
 
 rm -rf anykernel/kernels/
-mkdir -p anykernel/kernels/
+mkdir -p anykernel/kernels/miui/
 
 # Patch for SukiSU KPM support. 
 if [ $KSU_ENABLE -eq 1 ]; then
@@ -254,8 +277,9 @@ if [ $KSU_ENABLE -eq 1 ]; then
     cd -
 fi
 
-cp out/arch/arm64/boot/Image anykernel/kernels/
-cp out/arch/arm64/boot/dtb anykernel/kernels/
+cp out/arch/arm64/boot/Image anykernel/kernels/miui/
+cp out/arch/arm64/boot/dtb anykernel/kernels/miui/
+cp out/arch/arm64/boot/dtbo.img anykernel/kernels/miui/
 
 echo "Build for MIUI finished."
 
@@ -265,7 +289,7 @@ echo "Build for MIUI finished."
 
 cd anykernel 
 
-ZIP_FILENAME=Kernel_MIUI_${TARGET_DEVICE}_${KSU_ZIP_STR}_$(date +'%Y%m%d_%H%M%S')_anykernel3_${GIT_COMMIT_ID}.zip
+ZIP_FILENAME=APTKernel_MIUI_${TARGET_DEVICE}_${KSU_ZIP_STR}_$(date +'%Y%m%d_%H%M%S')_anykernel3_${GIT_COMMIT_ID}.zip
 
 zip -r9 $ZIP_FILENAME ./* -x .git .gitignore out/ ./*.zip
 
